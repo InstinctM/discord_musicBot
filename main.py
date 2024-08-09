@@ -4,6 +4,7 @@ import os
 import asyncio
 import yt_dlp
 from dotenv import load_dotenv
+from pytube import Playlist
 
 def run_bot():
     load_dotenv()
@@ -11,6 +12,8 @@ def run_bot():
     intents = discord.Intents.default()
     intents.message_content = True
     client = commands.Bot(command_prefix="!", intents=intents)
+    # Remove the default "help" command
+    client.remove_command("help")
 
     queues = {}
     voice_clients = {}
@@ -22,6 +25,10 @@ def run_bot():
     @client.event
     async def on_ready():
         print(f"{client.user} is now online!")
+
+    @client.event
+    async def on_guild_remove():
+        queues.clear()
 
     async def play_next(ctx):
         if queues[ctx.guild.id] != []:
@@ -38,15 +45,21 @@ def run_bot():
             print(e)
 
         try:
-            loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+            if ctx.voice_client.is_playing():
+                if ctx.guild.id not in queues:
+                    queues[ctx.guild.id] = []
+                queues[ctx.guild.id].append(url)
+                await ctx.channel.send("Song added to the queue.")
+            else:
+                loop = asyncio.get_event_loop()
+                data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
 
-            song = data["url"]
-            title = data["title"]
-            player = discord.FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
+                song = data["url"]
+                title = data["title"]
+                player = discord.FFmpegOpusAudio(song, **FFMPEG_OPTIONS)
 
-            await ctx.channel.send(f"Currently playing **{title}**")
-            voice_clients[ctx.guild.id].play(player, after= lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop))
+                await ctx.channel.send(f"Currently playing **{title}**")
+                voice_clients[ctx.guild.id].play(player, after= lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), client.loop))
         except Exception as e:
             print(e)
 
@@ -72,7 +85,7 @@ def run_bot():
             await ctx.channel.send(f"Disconnecting...")
             voice_clients[ctx.guild.id].stop()
 
-            if ctx.guild.id in queue:
+            if ctx.guild.id in queues:
                 queues[ctx.guild.id].clear()
 
             await voice_clients[ctx.guild.id].disconnect()
@@ -81,12 +94,33 @@ def run_bot():
             print(e)
 
     @client.command(name="queue")
-    async def queue(ctx, url):
+    async def queue(ctx):
         try:
-            if ctx.guild.id not in queues:
-                queues[ctx.guild.id] = []
-            queues[ctx.guild.id].append(url)
-            await ctx.channel.send("Added 1 song to the queue.")
+            if not ctx.guild.id in queues or len(queues) == 0:
+                await ctx.channel.send("The queue is empty!")
+            else:
+                await ctx.channel.send("Hold on! I am trying my best...")
+
+                next_songs = queues[ctx.guild.id][:5]
+
+                loop = asyncio.get_event_loop()
+                info = []
+                for url in next_songs:
+                    try:
+                        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+                        info.append({data["title"]: data["duration"]})
+                    except Exception as e:
+                        info.append({"Could not fetch information about this song!": "N/A"})
+
+                # Display the titles in the channel
+                queue_embed = discord.Embed(title=f"**{len(queues[ctx.guild.id])}** songs in queue. Coming Up Next...", description="***** Here are the next 5 songs *****", color=discord.Color.random())
+
+                for song_info in info:
+                    for title, duration in song_info.items():
+                        time = f"Length: {duration // 3600:02}:{(duration % 3600) // 60:02}:{duration % 60:02}"
+                        queue_embed.add_field(name=title, value=time, inline=False)
+                await ctx.channel.send(embed=queue_embed)
+ 
         except Exception as e:
             print(e)
 
@@ -95,32 +129,54 @@ def run_bot():
         try:
             voice_clients[ctx.guild.id].stop()
             await ctx.channel.send("Skipping the current song...")  
-            await play_next(ctx)
         except Exception as e:
             print(e)
         
     @client.command(name="clearQ")
     async def clearQ(ctx):
         try:
-            if ctx.guild.id in queue:
+            if ctx.guild.id in queues:
                 queues[ctx.guild.id].clear()
-                await ctx.channel.send("Queue cleared!")
+                await ctx.channel.send(f"{len(queues)} songs are removed from the queue.")
             else:
                 await ctx.channel.send("The queue is empty!")
+        except Exception as e:
+            print(e)
+
+    @client.command(name="playlist")
+    async def playlist(ctx, playlistUrl):
+        try:
+            pl = Playlist(playlistUrl)
+            
+            for i in pl.videos:
+                if ctx.guild.id not in queues:
+                    queues[ctx.guild.id] = []
+                queues[ctx.guild.id].append(i.watch_url)
+            
+            await ctx.channel.send(f"{len(pl.videos)} songs added to the queue.")
+
+            if ctx.voice_client is None:
+                voice_client = await ctx.author.voice.channel.connect()
+                voice_clients[ctx.guild.id] = voice_client
+            elif not ctx.voice_client.is_playing():
+                play_next(ctx)
         except Exception as e:
             print(e)
 
     @client.command(name="help")
     async def help(ctx):
         try:
-            help_embed = discord.Embed(title="List of Commands Available", color=discord.Color.random())
-            help_embed.add_field(name="play", value="Plays a song given a url from YouTube.")
-            help_embed.add_field(name="pause", value="Pauses the current playing song.")
-            help_embed.add_field(name="resume", value="Resumes playing the paused song.")
-            help_embed.add_field(name="leave", value="Leaves the voice channel.")
-            help_embed.add_field(name="queue", value="Adds a single song to the queue.")
-            help_embed.add_field(name="skip", value="Skips the current playing song.")    
-            help_embed.add_field(name="clearQ", value="Clears the queue.")    
+            help_embed = discord.Embed(title="Bot Help", description= "This is the list of available commands.",color=discord.Color.random())
+            help_embed.add_field(name="clearQ", value="Clears the queue.", inline=False)
+            help_embed.add_field(name="leave", value="Leaves the voice channel.", inline=False)
+            help_embed.add_field(name="pause", value="Pauses the current playing song.", inline=False)
+            help_embed.add_field(name="play", value="Plays a song given a url from YouTube.", inline=False)
+            help_embed.add_field(name="playlist", value="Adds all the songs in a YouTube playlist to the queue.", inline=False)
+            help_embed.add_field(name="queue", value="Shows next 5 songs in the queue.", inline=False)
+            help_embed.add_field(name="resume", value="Resumes playing the paused song.", inline=False)
+            help_embed.add_field(name="skip", value="Skips the current playing song.", inline=False)    
+
+            await ctx.channel.send(embed=help_embed)
         except Exception as e:
             print(e)
 
