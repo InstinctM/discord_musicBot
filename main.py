@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands
+import random
 import os
 import asyncio
 import yt_dlp
@@ -18,9 +19,9 @@ def run_bot():
     queues = {}
     voice_clients = {}
     YTDL_OPTIONS = {"format": "bestaudio/best"}
-    ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
-
     FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5','options': '-vn -filter:a "volume=1.0"'}
+
+    ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
 
     @client.event
     async def on_ready():
@@ -35,6 +36,27 @@ def run_bot():
             url = queues[ctx.guild.id].pop(0)
             await play(ctx, url)
 
+    async def displayNextSongs(ctx):
+        next_songs = queues[ctx.guild.id][:5]
+
+        loop = asyncio.get_event_loop()
+        info = []
+        for url in next_songs:
+            try:
+                data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
+                info.append({data["title"]: data["duration"]})
+            except Exception as e:
+                info.append({"Could not fetch information about this song!": "N/A"})
+
+        # Display the titles in the channel
+        queue_embed = discord.Embed(title=f"**{len(queues[ctx.guild.id])}** songs in queue. Coming Up Next...", description="***** Here are the next 5 songs... *****", color=discord.Color.random())
+
+        for song_info in info:
+            for title, duration in song_info.items():
+                time = f"Length: {duration // 3600:02}:{(duration % 3600) // 60:02}:{duration % 60:02}"
+                queue_embed.add_field(name=title, value=time, inline=False)
+        await ctx.channel.send(embed=queue_embed)
+
     @client.command(name="play")
     async def play(ctx, url):
         try:
@@ -46,11 +68,13 @@ def run_bot():
 
         try:
             if ctx.voice_client.is_playing():
+                # Queues stores songs for each voice channel it's in
                 if ctx.guild.id not in queues:
                     queues[ctx.guild.id] = []
                 queues[ctx.guild.id].append(url)
                 await ctx.channel.send("Song added to the queue.")
             else:
+                # Allows the bot to run and play music at the same time
                 loop = asyncio.get_event_loop()
                 data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
 
@@ -93,6 +117,15 @@ def run_bot():
         except Exception as e:
             print(e)
 
+    @client.command(name="shuffle")
+    async def shuffle(ctx):
+        try:
+            random.shuffle(queues[ctx.guild.id])
+            await displayNextSongs(ctx)
+            await ctx.channel.send("Queue shuffled")
+        except Exception as e:
+            print(e)
+
     @client.command(name="queue")
     async def queue(ctx):
         try:
@@ -100,26 +133,7 @@ def run_bot():
                 await ctx.channel.send("The queue is empty!")
             else:
                 await ctx.channel.send("Hold on! I am trying my best...")
-
-                next_songs = queues[ctx.guild.id][:5]
-
-                loop = asyncio.get_event_loop()
-                info = []
-                for url in next_songs:
-                    try:
-                        data = await loop.run_in_executor(None, lambda: ytdl.extract_info(url, download=False))
-                        info.append({data["title"]: data["duration"]})
-                    except Exception as e:
-                        info.append({"Could not fetch information about this song!": "N/A"})
-
-                # Display the titles in the channel
-                queue_embed = discord.Embed(title=f"**{len(queues[ctx.guild.id])}** songs in queue. Coming Up Next...", description="***** Here are the next 5 songs *****", color=discord.Color.random())
-
-                for song_info in info:
-                    for title, duration in song_info.items():
-                        time = f"Length: {duration // 3600:02}:{(duration % 3600) // 60:02}:{duration % 60:02}"
-                        queue_embed.add_field(name=title, value=time, inline=False)
-                await ctx.channel.send(embed=queue_embed)
+                await displayNextSongs(ctx)
  
         except Exception as e:
             print(e)
@@ -155,11 +169,15 @@ def run_bot():
             
             await ctx.channel.send(f"{len(pl.videos)} songs added to the queue.")
 
-            if ctx.voice_client is None:
+            # If a playlist is supplied and the bot in not in any voice channels
+            voice_client = ctx.voice_client
+            if not voice_client or not voice_client.is_connected():
                 voice_client = await ctx.author.voice.channel.connect()
                 voice_clients[ctx.guild.id] = voice_client
-            elif not ctx.voice_client.is_playing():
-                play_next(ctx)
+
+            if not voice_client.is_playing():
+                await play_next(ctx)
+
         except Exception as e:
             print(e)
 
@@ -174,6 +192,7 @@ def run_bot():
             help_embed.add_field(name="playlist", value="Adds all the songs in a YouTube playlist to the queue.", inline=False)
             help_embed.add_field(name="queue", value="Shows next 5 songs in the queue.", inline=False)
             help_embed.add_field(name="resume", value="Resumes playing the paused song.", inline=False)
+            help_embed.add_field(name="shuffle", value="Shuffles the current queue.", inline=False)    
             help_embed.add_field(name="skip", value="Skips the current playing song.", inline=False)    
 
             await ctx.channel.send(embed=help_embed)
