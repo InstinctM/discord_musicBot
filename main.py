@@ -10,15 +10,16 @@ from pytube import Playlist
 def run_bot():
     load_dotenv()
     TOKEN = os.getenv("DISCORD_TOKEN")
+    PREFIX = ";"
     intents = discord.Intents.default()
     intents.message_content = True
-    client = commands.Bot(command_prefix="!", intents=intents)
+    client = commands.Bot(command_prefix=PREFIX, intents=intents)
     # Remove the default "help" command
     client.remove_command("help")
 
     queues = {}
     voice_clients = {}
-    YTDL_OPTIONS = {"format": "bestaudio/best"}
+    YTDL_OPTIONS = {"format": "bestaudio/best", "outtmpl": "%(extractor)s-%(id)s-%(title)s-%(qhash)s.%(ext)s", "quiet": True}
     FFMPEG_OPTIONS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5','options': '-vn -filter:a "volume=1.0"'}
 
     ytdl = yt_dlp.YoutubeDL(YTDL_OPTIONS)
@@ -151,7 +152,7 @@ def run_bot():
         try:
             if ctx.guild.id in queues:
                 queues[ctx.guild.id].clear()
-                await ctx.channel.send(f"{len(queues)} songs are removed from the queue.")
+                await ctx.channel.send(f"{len(queues[ctx.guild.id])} songs are removed from the queue.")
             else:
                 await ctx.channel.send("The queue is empty!")
         except Exception as e:
@@ -184,16 +185,17 @@ def run_bot():
     @client.command(name="help")
     async def help(ctx):
         try:
-            help_embed = discord.Embed(title="Bot Help", description= "This is the list of available commands.",color=discord.Color.random())
-            help_embed.add_field(name="clearQ", value="Clears the queue.", inline=False)
-            help_embed.add_field(name="leave", value="Leaves the voice channel.", inline=False)
-            help_embed.add_field(name="pause", value="Pauses the current playing song.", inline=False)
-            help_embed.add_field(name="play", value="Plays a song given a url from YouTube.", inline=False)
-            help_embed.add_field(name="playlist", value="Adds all the songs in a YouTube playlist to the queue.", inline=False)
-            help_embed.add_field(name="queue", value="Shows next 5 songs in the queue.", inline=False)
-            help_embed.add_field(name="resume", value="Resumes playing the paused song.", inline=False)
-            help_embed.add_field(name="shuffle", value="Shuffles the current queue.", inline=False)    
-            help_embed.add_field(name="skip", value="Skips the current playing song.", inline=False)    
+            help_embed = discord.Embed(title="Bot Help", description=f"This is the list of available commands. \n The current prefix is  **{PREFIX}**",color=discord.Color.random())
+            help_embed.add_field(name="`clearQ`", value="Clears the queue.", inline=False)
+            help_embed.add_field(name="`help`", value="Opens up the current menu  .", inline=False)
+            help_embed.add_field(name="`leave`", value="Leaves the voice channel.", inline=False)
+            help_embed.add_field(name="`pause`", value="Pauses the current playing song.", inline=False)
+            help_embed.add_field(name="`play`", value="Plays a song given a url from YouTube.", inline=False)
+            help_embed.add_field(name="`playlist`", value="Adds all the songs in a YouTube playlist to the queue.", inline=False)
+            help_embed.add_field(name="`queue`", value="Shows next 5 songs in the queue.", inline=False)
+            help_embed.add_field(name="`resume`", value="Resumes playing the paused song.", inline=False)
+            help_embed.add_field(name="`shuffle`", value="Shuffles the current queue.", inline=False)    
+            help_embed.add_field(name="`skip`", value="Skips the current playing song.", inline=False)    
 
             await ctx.channel.send(embed=help_embed)
         except Exception as e:
