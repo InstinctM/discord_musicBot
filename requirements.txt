@@ -3,3 +3,7 @@ python-dotenv
 pynacl
 yt_dlp
 pytube
+Flask
+requests-html
+lxml-html-clean
+beautifulsoup4
