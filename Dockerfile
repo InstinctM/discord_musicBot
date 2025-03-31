@@ -10,7 +10,7 @@ RUN apt-get update && \
     apt-get install -y ffmpeg
 
 # Set a volume for the application code
-VOLUME ["/opt/app"]
+VOLUME ["/opt"]
 
 EXPOSE 8080
 
