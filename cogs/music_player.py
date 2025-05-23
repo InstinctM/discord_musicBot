@@ -39,7 +39,7 @@ class music_player(commands.Cog):
         ctx (commands.Context)
         
         '''
-        if queues[ctx.guild.id] != []:
+        if queues[ctx.guild.id]:
             url = queues[ctx.guild.id].pop(0)
             info_logger.info(f"Playing the next song - {url}")
             await self.play(ctx, url)
@@ -58,13 +58,13 @@ class music_player(commands.Cog):
 
     async def displayNextSongs(self, ctx: commands.Context):
         '''
-        Sends an Embed message to the text channel to display the upcoming 10 songs to be played.
+        Sends an Embed message to the text channel to display the upcoming 5 songs to be played.
 
         Args:
         ctx (commands.Context)
         '''
 
-        next_songs = queues[ctx.guild.id][:10]
+        next_songs = queues[ctx.guild.id][:5]
 
         loop = asyncio.get_event_loop()
         info = []
@@ -80,7 +80,7 @@ class music_player(commands.Cog):
         # Display the titles in the channel
         queue_embed = discord.Embed(title=f"**{len(queues[ctx.guild.id])}** songs in queue. Coming Up Next...", description="***** Here are the next 10 songs... *****", color=discord.Color.random())
 
-        for song_info in info:
+        for song_info in info:  
             for title, duration in song_info.items():
                 time = self.displayTime(duration)
                 queue_embed.add_field(name=title, value=time, inline=False)
@@ -103,9 +103,10 @@ class music_player(commands.Cog):
             return
 
         try:
-            # Connect to the voice channel you are in
-            voice_client = await ctx.author.voice.channel.connect()
-            voice_clients[voice_client.guild.id] = voice_client
+            if not discord.utils.get(self.bot.voice_clients, guild=ctx.guild):
+                # Connect to the voice channel you are in
+                voice_client = await ctx.author.voice.channel.connect()
+                voice_clients[voice_client.guild.id] = voice_client
         except Exception as e:
             print(e)
             error_logger.error(e)
@@ -262,28 +263,20 @@ class music_player(commands.Cog):
         ctx (commands.Context)
         count (int): An optional parameter that when supplied the bot skips 'count' number of songs, Defaults = 1.
         '''  
-        if isinstance(count, int):
-            if count is None:
-                count = 1
 
-            if count == 1:
-                self.play_next(ctx)
-            elif count > 1:
-                try:
-                    queues[ctx.guild.id] = queues[ctx.guild.id][count-1:]
-                    voice_clients[ctx.guild.id].stop()
-                    info_logger.info(f"Skipping {count} song(s)")
-                    await ctx.channel.send(f"Skipping {count} song(s)")
-                    await self.displayNextSongs(ctx)
-                except Exception as e:
-                    print(e)
-                    error_logger.error(e)
-            else:
-                await ctx.channel.send("Cannot skip 0 songs!")
-                error_logger.error("Cannot skip 0 songs!")
-        else:
+        if count < 1:
             await ctx.channel.send("Please input a valid number!")
-            error_logger.error("Passed count is not a valid integer")
+            error_logger.error(f"Invalid count: {count}")
+        else:
+            try:
+                voice_clients[ctx.guild.id].stop()
+                queues[ctx.guild.id] = queues.get(ctx.guild.id, [])[count-1:]
+                info_logger.info(f"Skipping {count} song(s)")
+                await ctx.channel.send(f"⏭ Skipping {count} song(s)")
+                # await self.displayNextSongs(ctx)
+            except Exception as e:
+                print(e)
+                error_logger.error(e)
             
     @commands.command(name="clearQ")
     async def clearQ(self, ctx):
