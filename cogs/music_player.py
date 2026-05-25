@@ -172,7 +172,7 @@ class music_player(commands.Cog):
         '''        
         try:
             info_logger.info("Pausing music bot")
-            await ctx.channel.send(f"Pasuing...")
+            await ctx.channel.send(f"Pausing...")
             voice_clients[ctx.guild.id].pause()
         except Exception as e:
             print(e)

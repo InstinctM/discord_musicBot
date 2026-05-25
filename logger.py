@@ -6,7 +6,7 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 def setup_logger(name, log_file, level=logging.INFO):
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
-    handler = logging.FileHandler(log_file)        
+    handler = logging.FileHandler(log_file, encoding='utf-8')        
     handler.setFormatter(formatter)
 
     logger = logging.getLogger(name)

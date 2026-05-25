@@ -7,3 +7,5 @@ Flask
 requests-html
 lxml-html-clean
 beautifulsoup4
+davey
+aiohttp

@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 BOT_TOKEN = os.getenv("DISCORD_TOKEN")
+if not BOT_TOKEN:
+    raise KeyError("Discord Token Key not found")
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
@@ -21,6 +24,7 @@ async def load():
 
 async def main():
     await load()
+    print("Commands loaded.")
     await bot.start(token=BOT_TOKEN)
 
 if __name__ == "__main__":
